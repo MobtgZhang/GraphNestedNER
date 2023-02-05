@@ -6,17 +6,17 @@ import numpy as np
 from torch.utils.data import Dataset
 
 def batch_fy(batch):
-    max_length = max([len(bt["sentence"]) for bt in batch])
-    sent_idxs = [bt["sentence"]+(max_length-len(bt["sentence"]))[0] for bt in batch]
-    sent_mask = [len(bt["sentence"])*[1]+(max_length-len(bt["sentence"]))[0] for bt in batch]
-    return 
+    max_length = max([len(bt[0]) for bt in batch])
+    sent_idxs = np.array([bt[0]+(max_length-len(bt[0]))*[0] for bt in batch],dtype=np.int64)
+    sent_mask = np.array([len(bt[0])*[1]+(max_length-len(bt[0]))*[0] for bt in batch],dtype=np.int64)
+    label = [np.pad(item[1],[(0,max_length-len(item[0])),(0,max_length-len(item[0]))]) for item in batch]
+    label = np.array(label,np.int64)
+    return sent_idxs,sent_mask,label
 
 class EntitiesDataset(Dataset):
-    def __init__(self,result_dir,tag_name):
+    def __init__(self,result_dir,tag_name,data_dict):
         super(EntitiesDataset,self).__init__()
         load_file = os.path.join(result_dir,"%s.json"%tag_name)
-        dict_file = os.path.join(result_dir,"dictionary.txt")
-        data_dict = Dictionary.load(dict_file)
         label_file = os.path.join(result_dir,"labels.txt")
         self.idx2label = {}
         self.label2idx = {}
@@ -35,7 +35,7 @@ class EntitiesDataset(Dataset):
                 self.data_set.append(item)
     def __getitem__(self, index):
         sentence = self.data_set[index]["sentence"]
-        tagged_mat = np.zeros(shape=(len(sentence),len(sentence)),dtype=np.int64)
+        tagged_mat = np.ones(shape=(len(sentence),len(sentence)),dtype=np.int64)*self.label2idx["UNK"]
         for item in self.data_set[index]["labeled entities"]:
             tagged_mat[item[0],item[1]] = item[2]
         return sentence,tagged_mat

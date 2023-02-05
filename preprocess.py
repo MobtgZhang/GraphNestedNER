@@ -7,7 +7,8 @@ from src.data import Dictionary
 def build_OpenSet_dataset(data_dir,result_dir):
     load_tags_list = ["train","dev","test"]
     save_tags_list = ["train","valid","test"]
-    label_set = set()
+    label_set = dict()
+    label_set["UNK"] = 0
     for load_tag,save_tag in zip(load_tags_list,save_tags_list):
         load_file = os.path.join(data_dir,"%s.json"%load_tag)
         save_file = os.path.join(result_dir,"%s.json"%save_tag)
@@ -18,10 +19,9 @@ def build_OpenSet_dataset(data_dir,result_dir):
                     item["sentence"] = eval(item["sentence"])
                     item["labeled entities"] = eval(item["labeled entities"])
                     for tp_item in item["labeled entities"]:
-                        label_set.add(tp_item[2])
+                        label_set[tp_item[2]] = len(label_set)
                     wfp.write(json.dumps(item,ensure_ascii=False)+"\n")
     save_classes_file = os.path.join(result_dir,"labels.txt")
-    label_set.add("UNK")
     with open(save_classes_file,mode="w",encoding="utf-8") as wfp: 
         for idx,word in enumerate(label_set):
             wfp.write(str(idx)+"\t"+word+"\n")

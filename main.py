@@ -1,37 +1,51 @@
 import os
 import argparse
+import yaml
+
+import torch
 
 from torch.utils.data import DataLoader
 
-from src.data import Dictionary,EntitiesDataset
+from src.data import Dictionary,EntitiesDataset,batch_fy
+from src.model import GraphNestedModel
 
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir",default="./data",type=str)
-    parser.add_argument("--result-dir",default="./result",type=str)
-    parser.add_argument("--dataset",default="openSet",type=str)
-    args = parser.parse_args()
-    return args
-def check_args(args):
-    data_dir = os.path.join(args.data_dir,args.dataset)
-    result_dir = os.path.join(args.result_dir,args.dataset)
-    assert os.path.exists(data_dir)
-    if not os.path.exists(result_dir):
-        os.makedirs(result_dir)
+from config import get_args,get_config,check_args
+
 def main():
     args = get_args()
     check_args(args)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # dataset preparation
     result_dir = os.path.join(args.result_dir,args.dataset)
-    train_dataset = EntitiesDataset(result_dir,"train")
+    dict_file = os.path.join(result_dir,"dictionary.txt")
+    data_dict = Dictionary.load(dict_file)
+    train_loader = DataLoader(EntitiesDataset(result_dir,"train",data_dict),batch_size=args.batch_size,shuffle=True,collate_fn=batch_fy)
+    valid_loader = DataLoader(EntitiesDataset(result_dir,"valid",data_dict),batch_size=args.batch_size,shuffle=True,collate_fn=batch_fy)
+    config = get_config(args)
+    config.num_chars = len(data_dict)
+    config.label_class = len(train_loader.dataset.label2idx)
+    # the model defination
+    model = GraphNestedModel(config).to(device)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(),lr=args.learning_rate)
+    batch_size = args.batch_size
+    label_class = config.label_class
 
-    for k in range(len(train_dataset)):
-        print(train_dataset[k])
-    exit()
-    dev_file = os.path.join(result_dir,"dev.json")
-    dev_dataset = EntitiesDataset(dev_file,data_dict)
-    test_file = os.path.join(result_dir,"test.json")
-    test_dataset = EntitiesDataset(test_file,data_dict)
-
-
+    for epoch in range(args.epoches):
+        loss_all = 0.0
+        for item in train_loader:
+            optimizer.zero_grad()
+            sent,mask,label = item
+            sent = torch.tensor(sent,dtype=torch.long).to(device)
+            mask = torch.tensor(mask,dtype=torch.long).to(device)
+            label = torch.tensor(label,dtype=torch.long).to(device)
+            predict = model(sent,mask)
+            label = label.flatten()
+            predict = predict.view(-1,label_class)
+            loss = loss_fn(predict,label)
+            loss_all += loss.item()
+            optimizer.step()
+        loss_all /= len(train_loader)
+        print("The loss is %0.4f"%loss_all)
 if __name__ == "__main__":
     main()
